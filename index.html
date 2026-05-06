@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Palo Alto NGFW Lab — Angelo Veldbloem</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --accent: #ff6b2b;
+    --accent2: #ffb347;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --border: #2a2a38;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* NOISE TEXTURE */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -200px;
+    right: -200px;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255,107,43,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 24px;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.2s;
+  }
+
+  .hero-title {
+    font-size: clamp(48px, 8vw, 96px);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 32px;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.4s;
+  }
+
+  .hero-title span {
+    color: var(--accent);
+    display: block;
+  }
+
+  .hero-desc {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 560px;
+    line-height: 1.7;
+    margin-bottom: 48px;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.6s;
+  }
+
+  .hero-meta {
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.8s;
+  }
+
+  .meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .meta-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .meta-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* SCROLL INDICATOR */
+  .scroll-hint {
+    position: absolute;
+    bottom: 40px;
+    left: 60px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 1.2s;
+  }
+
+  .scroll-hint::before {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: var(--muted);
+    animation: expandLine 1s ease forwards 1.4s;
+    transform-origin: left;
+    transform: scaleX(0);
+  }
+
+  @keyframes expandLine {
+    to { transform: scaleX(1); }
+  }
+
+  /* BIG NUMBER */
+  .big-number {
+    position: absolute;
+    right: 60px;
+    bottom: 60px;
+    font-size: clamp(120px, 20vw, 240px);
+    font-weight: 800;
+    color: rgba(255,107,43,0.06);
+    line-height: 1;
+    pointer-events: none;
+    letter-spacing: -0.05em;
+  }
+
+  /* SECTIONS */
+  section {
+    padding: 100px 60px;
+    position: relative;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 60px;
+    line-height: 1.1;
+  }
+
+  /* TOPOLOGY */
+  .topology-section {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .topology-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 60px;
+  }
+
+  .topo-node {
+    background: var(--surface2);
+    padding: 32px;
+    transition: background 0.2s;
+  }
+
+  .topo-node:hover { background: #1f1f2e; }
+
+  .topo-node-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .topo-node-name {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .topo-node-ip {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .topo-arrow {
+    grid-column: 1 / -1;
+    background: var(--bg);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    letter-spacing: 0.1em;
+  }
+
+  .arrow-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+  }
+
+  /* TECH STACK */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 80px;
+  }
+
+  .tech-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tech-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transition: transform 0.2s;
+    transform-origin: left;
+  }
+
+  .tech-card:hover::before { transform: scaleX(1); }
+  .tech-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+  .tech-icon {
+    font-size: 28px;
+    margin-bottom: 12px;
+  }
+
+  .tech-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .tech-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ACHIEVEMENTS */
+  .achievements-section {
+    background: var(--bg);
+  }
+
+  .achievement-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .achievement-item {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    align-items: center;
+    gap: 24px;
+    padding: 28px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: all 0.2s;
+    cursor: default;
+  }
+
+  .achievement-item:hover {
+    background: var(--surface2);
+    border-color: var(--accent);
+    transform: translateX(4px);
+  }
+
+  .achievement-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .achievement-text {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .achievement-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-weight: 400;
+  }
+
+  .status-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    padding: 6px 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .status-done {
+    background: rgba(74, 222, 128, 0.1);
+    color: var(--green);
+    border: 1px solid rgba(74, 222, 128, 0.2);
+  }
+
+  .status-wip {
+    background: rgba(251, 191, 36, 0.1);
+    color: var(--yellow);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+  }
+
+  /* SKILLS */
+  .skills-section {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .skills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+  }
+
+  .skill-card {
+    padding: 32px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .skill-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .skill-title::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .skill-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .skill-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 5px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+  }
+
+  /* FOOTER */
+  footer {
+    padding: 60px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: gap;
+    gap: 24px;
+  }
+
+  .footer-name {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .footer-name span { color: var(--accent); }
+
+  .footer-links {
+    display: flex;
+    gap: 24px;
+  }
+
+  .footer-link {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .footer-link:hover { color: var(--accent); }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* DIVIDER */
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: var(--accent);
+    margin-bottom: 40px;
+  }
+
+  /* COMMAND BLOCK */
+  .cmd-block {
+    background: #050508;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    margin: 32px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cmd-block::before {
+    content: '● ● ●';
+    position: absolute;
+    top: 12px;
+    left: 20px;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 4px;
+  }
+
+  .cmd-block-inner {
+    margin-top: 24px;
+  }
+
+  .cmd-prompt { color: var(--accent); }
+  .cmd-text { color: #a8b4c8; }
+  .cmd-output { color: var(--green); }
+  .cmd-comment { color: var(--muted); }
+
+  @media (max-width: 768px) {
+    .hero, section, footer { padding: 60px 24px; }
+    .topology-grid { grid-template-columns: 1fr; }
+    .hero-title { font-size: 48px; }
+    .big-number { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-tag">Portfolio Project — Network Security</div>
+  <h1 class="hero-title">
+    Palo Alto
+    <span>NGFW Lab</span>
+  </h1>
+  <p class="hero-desc">
+    Enterprise-grade Next-Generation Firewall deployment across two sites — HQ and Branch Office — with full network segmentation, security profiles, and site-to-site VPN.
+  </p>
+  <div class="hero-meta">
+    <div class="meta-item">
+      <span class="meta-label">Platform</span>
+      <span class="meta-value">Nutanix AHV</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Firewall</span>
+      <span class="meta-value">PAN-OS VM-Series</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Course</span>
+      <span class="meta-value">De Werkplek 2 — HoGent</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Author</span>
+      <span class="meta-value">Angelo Veldbloem</span>
+    </div>
+  </div>
+  <div class="scroll-hint">SCROLL TO EXPLORE</div>
+  <div class="big-number">PA</div>
+</section>
+
+<!-- TOPOLOGY -->
+<section class="topology-section">
+  <div class="section-label">Infrastructure</div>
+  <h2 class="section-title reveal">Network Topology</h2>
+
+  <div class="topology-grid reveal">
+    <div class="topo-node">
+      <div class="topo-node-label">Headquarters</div>
+      <div class="topo-node-name">HQ Firewall</div>
+      <div class="topo-node-ip">WAN · LAN · DMZ · SERVERS</div>
+    </div>
+    <div class="topo-node">
+      <div class="topo-node-label">Branch Office</div>
+      <div class="topo-node-name">BO Firewall</div>
+      <div class="topo-node-ip">WAN · LAN</div>
+    </div>
+    <div class="topo-arrow">
+      <div class="arrow-line"></div>
+      IPSec VPN Tunnel (HQ ↔ BO)
+      <div class="arrow-line"></div>
+    </div>
+    <div class="topo-node">
+      <div class="topo-node-label">HQ Zones</div>
+      <div class="topo-node-name">Segmented Network</div>
+      <div class="topo-node-ip">LAN · DMZ · SERVERS · WAN</div>
+    </div>
+    <div class="topo-node">
+      <div class="topo-node-label">Security Tools</div>
+      <div class="topo-node-name">Kali Linux</div>
+      <div class="topo-node-ip">nmap · nikto · ping flood</div>
+    </div>
+  </div>
+
+  <div class="cmd-block reveal">
+    <div class="cmd-block-inner">
+      <div><span class="cmd-prompt">admin@FW-HQ&gt; </span><span class="cmd-text">show interface all</span></div>
+      <div><span class="cmd-output">ethernet1/1  WAN    172.16.3.217/28   ✓ up</span></div>
+      <div><span class="cmd-output">ethernet1/2  LAN    10.10.1.1/24      ✓ up</span></div>
+      <div><span class="cmd-output">ethernet1/3  SERVER 10.10.2.1/24      ✓ up</span></div>
+      <div><span class="cmd-output">ethernet1/4  DMZ    10.10.3.1/24      ✓ up</span></div>
+      <div><span class="cmd-comment"># All interfaces operational — zones configured</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- TECH STACK -->
+<section>
+  <div class="section-label">Technologies Used</div>
+  <h2 class="section-title reveal">Tech Stack</h2>
+
+  <div class="tech-grid reveal">
+    <div class="tech-card">
+      <div class="tech-icon">🔥</div>
+      <div class="tech-name">Palo Alto PAN-OS</div>
+      <div class="tech-desc">VM-Series NGFW, GUI + CLI configuration</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">☁️</div>
+      <div class="tech-name">Nutanix AHV</div>
+      <div class="tech-desc">Private cloud virtualization platform</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">🖥️</div>
+      <div class="tech-name">Windows Server 2025</div>
+      <div class="tech-desc">Active Directory, DNS, DHCP (redundant DCs)</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">🐧</div>
+      <div class="tech-name">Kali Linux</div>
+      <div class="tech-desc">Penetration testing & network auditing</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">💀</div>
+      <div class="tech-name">Metasploitable</div>
+      <div class="tech-desc">Intentionally vulnerable web server (DMZ)</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">🔐</div>
+      <div class="tech-name">IPSec VPN</div>
+      <div class="tech-desc">IKEv2, AES-256-CBC, SHA256, group14</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">🛡️</div>
+      <div class="tech-name">Security Profiles</div>
+      <div class="tech-desc">URL filtering, antivirus, vulnerability protection</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">📡</div>
+      <div class="tech-name">Active Directory</div>
+      <div class="tech-desc">Domain join, ADDS, redundant DC setup</div>
+    </div>
+  </div>
+</section>
+
+<!-- ACHIEVEMENTS -->
+<section class="achievements-section">
+  <div class="section-label">What I Built</div>
+  <h2 class="section-title reveal">Completed Tasks</h2>
+  <div class="divider"></div>
+
+  <div class="achievement-list reveal">
+    <div class="achievement-item">
+      <span class="achievement-num">01</span>
+      <div>
+        <div class="achievement-text">Palo Alto CLI Bootstrap</div>
+        <div class="achievement-sub">Configured management IP, gateway, DNS via CLI — accessed GUI remotely</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">02</span>
+      <div>
+        <div class="achievement-text">Interface & Zone Configuration</div>
+        <div class="achievement-sub">WAN, LAN, DMZ, SERVERS zones — static routes, NAT policies, management profiles</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">03</span>
+      <div>
+        <div class="achievement-text">Windows Clients Deployment</div>
+        <div class="achievement-sub">Win10 + Win11 clients on correct subnets, static IPs, ping to gateway verified</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">04</span>
+      <div>
+        <div class="achievement-text">Windows Server 2025 — Dual DC</div>
+        <div class="achievement-sub">ADDS, DNS, DHCP installed — HQ as primary, BO as redundant DC</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">05</span>
+      <div>
+        <div class="achievement-text">Firewall Policy Hardening</div>
+        <div class="achievement-sub">Inter-zone policies, DNS restricted to DC, internet access per zone</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">06</span>
+      <div>
+        <div class="achievement-text">IPSec VPN — HQ ↔ BO</div>
+        <div class="achievement-sub">IKEv2, AES-256, SHA256, group14 — tunnel configuration complete</div>
+      </div>
+      <span class="status-badge status-wip">IN PROGRESS</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">07</span>
+      <div>
+        <div class="achievement-text">Metasploitable Web Server</div>
+        <div class="achievement-sub">Deployed in DMZ, accessible from LAN and externally via NAT</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">08</span>
+      <div>
+        <div class="achievement-text">Red Team Audit with Kali</div>
+        <div class="achievement-sub">nmap port scans, nikto web vulnerability scan, ICMP flood test</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+    <div class="achievement-item">
+      <span class="achievement-num">09</span>
+      <div>
+        <div class="achievement-text">Security Profiles</div>
+        <div class="achievement-sub">URL filtering (gambling blocked), antivirus (eicar.org test), ICMP flood protection</div>
+      </div>
+      <span class="status-badge status-done">DONE</span>
+    </div>
+  </div>
+</section>
+
+<!-- SKILLS -->
+<section class="skills-section">
+  <div class="section-label">Skills Demonstrated</div>
+  <h2 class="section-title reveal">What This Shows</h2>
+
+  <div class="skills-grid reveal">
+    <div class="skill-card">
+      <div class="skill-title">Network Security</div>
+      <div class="skill-tags">
+        <span class="skill-tag">NGFW</span>
+        <span class="skill-tag">Zone segmentation</span>
+        <span class="skill-tag">NAT</span>
+        <span class="skill-tag">Security policies</span>
+        <span class="skill-tag">IPSec VPN</span>
+        <span class="skill-tag">IKEv2</span>
+      </div>
+    </div>
+    <div class="skill-card">
+      <div class="skill-title">Windows Infrastructure</div>
+      <div class="skill-tags">
+        <span class="skill-tag">Active Directory</span>
+        <span class="skill-tag">DNS</span>
+        <span class="skill-tag">DHCP</span>
+        <span class="skill-tag">Domain join</span>
+        <span class="skill-tag">Redundant DC</span>
+      </div>
+    </div>
+    <div class="skill-card">
+      <div class="skill-title">Offensive Security</div>
+      <div class="skill-tags">
+        <span class="skill-tag">nmap</span>
+        <span class="skill-tag">nikto</span>
+        <span class="skill-tag">Port scanning</span>
+        <span class="skill-tag">Vulnerability enum</span>
+        <span class="skill-tag">Flood testing</span>
+      </div>
+    </div>
+    <div class="skill-card">
+      <div class="skill-title">Cloud & Virtualisation</div>
+      <div class="skill-tags">
+        <span class="skill-tag">Nutanix AHV</span>
+        <span class="skill-tag">VM deployment</span>
+        <span class="skill-tag">VLAN config</span>
+        <span class="skill-tag">Private cloud</span>
+      </div>
+    </div>
+    <div class="skill-card">
+      <div class="skill-title">Troubleshooting</div>
+      <div class="skill-tags">
+        <span class="skill-tag">ARP debugging</span>
+        <span class="skill-tag">IKE diagnostics</span>
+        <span class="skill-tag">Log analysis</span>
+        <span class="skill-tag">CLI + GUI</span>
+        <span class="skill-tag">NAT traversal</span>
+      </div>
+    </div>
+    <div class="skill-card">
+      <div class="skill-title">Security Hardening</div>
+      <div class="skill-tags">
+        <span class="skill-tag">URL filtering</span>
+        <span class="skill-tag">Antivirus profiles</span>
+        <span class="skill-tag">Flood protection</span>
+        <span class="skill-tag">SSL decryption</span>
+        <span class="skill-tag">SafeSearch</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-name">Angelo <span>Veldbloem</span></div>
+  <div class="footer-links">
+    <a href="https://github.com/AngeloAngie" class="footer-link" target="_blank">GitHub</a>
+    <a href="#" class="footer-link">AngieTech</a>
+  </div>
+</footer>
+
+<script>
+  // Intersection Observer for reveal animations
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => {
+          entry.target.classList.add('visible');
+        }, i * 80);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  reveals.forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
